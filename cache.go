@@ -18,19 +18,19 @@ type RedisCache struct {
 	store map[string]*Entry // actual structure of a hash map
 }
 
-func newRedisCache() *RedisCache {
+func newRedisServer() *RedisCache {
 	return &RedisCache{
 		store: make(map[string]*Entry),
 	}
 }
 
-func(r *RedisCache) SET(key, value string, ttl int) string {
+func(r *RedisCache) SET(key, value string, ttl int) (string, bool) {
 	r.mu.Lock();
 	defer r.mu.Unlock();
 
 	_, exists := r.store[key];
 	if exists {
-		return "Key with a value already exists";
+		return "Key with a value already exists", false;
 	};
 
 	// creating a new Entryy struct in the map and initialises it's value with value field
@@ -42,7 +42,8 @@ func(r *RedisCache) SET(key, value string, ttl int) string {
 
 	r.store[key] = entry;
 	// fmt.Println("Value successfully set to the given key");
-	return "Value successfully set to the given key"
+	fmt.Println("Value successfully set to the given key");
+	return "Value successfully set to the given key", true;
 }
 
 func(r *RedisCache) GET(key string) (string, bool) {
@@ -63,11 +64,12 @@ func(r *RedisCache) GET(key string) (string, bool) {
 	return entry.value, true
 }
 
-func(r *RedisCache) DELETE(key string) {
+func(r *RedisCache) DELETE(key string) bool {
 	r.mu.Lock();
-	r.mu.Unlock();
+	defer r.mu.Unlock();
 
 	delete(r.store, key);
 	fmt.Println("Deleted the given key successfully", key);
+	return true;
 }
 
