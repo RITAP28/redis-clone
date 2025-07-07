@@ -75,6 +75,20 @@ func (r *RedisCache) handleConnection (conn net.Conn) {
 	}
 }
 
+func (r *RedisCache) handleConnectionTwo (conn net.Conn) {
+	response := "+OK\r\n";
+	_, err := conn.Write([]byte(response));
+
+	if err != nil {
+		fmt.Println("Error writing to connection: ", err.Error());
+		return;
+	} else {
+		fmt.Println("Successful connection");
+	}
+
+	conn.Close()
+}
+
 func main() {
 	fmt.Println("Launching server...");
 
@@ -94,6 +108,7 @@ func main() {
 		}
 
 		fmt.Println("Client connected");
-		go server.handleConnection(conn);
+		// go server.handleConnection(conn);
+		go server.handleConnectionTwo(conn);
 	}
 }
