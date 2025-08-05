@@ -1,7 +1,11 @@
-package main
+// package cache
+package cache
 
 import (
+	"bufio"
 	"fmt"
+	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,7 +22,7 @@ type RedisCache struct {
 	store map[string]*Entry // actual structure of a hash map
 }
 
-func newRedisServer() *RedisCache {
+func NewRedisServer() *RedisCache {
 	return &RedisCache{
 		store: make(map[string]*Entry),
 	}
@@ -71,5 +75,74 @@ func(r *RedisCache) DELETE(key string) bool {
 	delete(r.store, key);
 	fmt.Println("Deleted the given key successfully", key);
 	return true;
+}
+
+func (r *RedisCache) HandleConnection (conn net.Conn) {
+	defer conn.Close();
+
+	reader := bufio.NewReader(conn);
+	for {
+		// Read the request
+		req, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading: ", err);
+			return;
+		}
+
+		req = strings.TrimSpace(req);
+		parts := strings.Split(req, " ");
+
+		if len(parts) == 0 {
+			continue
+		};
+
+		// commands are case-insensitive
+		command := strings.ToUpper(parts[0])
+
+		switch command {
+		case "SET":
+			if len(parts) != 3 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'set' command\r\n"))
+				continue;
+			}
+
+			key := parts[1]
+			value := parts[2]
+			r.SET(key, value, 1000);
+			conn.Write([]byte("+OK\r\n"))
+
+		case "GET":
+			if len(parts) != 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'get' command\r\n"))
+				continue;
+			}
+
+			key := parts[1];
+			value, ok := r.GET(key);
+			if !ok {
+				conn.Write([]byte("$1\r\n"));
+				continue;
+			} else {
+				response := fmt.Sprintf("$%d\r\n%s\r\n", len(value), value); // RESP representation of string
+				conn.Write([]byte(response))
+			}
+
+		case "DELETE":
+			if len(parts) != 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'delete' command\r\n"));
+				continue;
+			}
+
+			key := parts[1];
+			ok := r.DELETE(key);
+			if !ok {
+				conn.Write([]byte("-ERR Error while performing deletion operation\r\n"));
+				continue;
+			}
+
+		default:
+			conn.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
+		}
+	}
 }
 
