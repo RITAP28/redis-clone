@@ -101,7 +101,7 @@ func parseBulkStrings(reader *bufio.Reader) (string, error) {
 	return string(buf), nil
 }
 
-func parseArrays(reader *bufio.Reader) ([]string, error) {
+func parseArrays(reader *bufio.Reader) ([]any, error) {
 	// example of an array: *2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n
 	// the array can contain any data type, including bulk strings, integers, simple strings etc
 	line, err := reader.ReadString('\n');
@@ -128,16 +128,14 @@ func parseArrays(reader *bufio.Reader) ([]string, error) {
 		return nil, nil;
 	};
 
-	result := make([]string, arrayLength);
+	result := make([]interface{}, arrayLength);
 	for i := range arrayLength {
-		bulkString, err := parseBulkStrings(reader);
+		element, err := HandleRESP(reader);
 		if err != nil {
-			fmt.Println("Error parsing bulk string in array");
-			return nil, err;
+			return nil, fmt.Errorf("error parsing element %d in array: %w", i, err);
 		};
-
-		result[i] = bulkString;
-	}
+		result[i] = element;
+	};
 
 	return result, nil;
 };
@@ -177,7 +175,7 @@ func parseBooleans(reader *bufio.Reader) (bool, error) {
 	case 't':
 		return true, nil;
 	case 'f':
-		return true, nil;
+		return false , nil;
 	default:
 		return false, fmt.Errorf("invalid boolean value: %s", line)
 	}

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"redis-clone/parser"
 )
 
 // covalent to interfaces/types in typescript
@@ -82,42 +84,77 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 
 	reader := bufio.NewReader(conn);
 	for {
-		// Read the request
-		req, err := reader.ReadString('\n')
+		// let the command coming from the client to the redis server
+		// pass through the resp parser
+
+
+		// for the example command: SET hello world from client
+		// parsedCmd: []interface{"SET", "hello", "world"}
+		parsedCmd, err := parser.HandleRESP(reader);
 		if err != nil {
-			fmt.Println("Error reading: ", err);
-			return;
-		}
+			if err.Error() == "EOF" {
+				fmt.Printf("Client disconnected");
+				return;
+			};
 
-		req = strings.TrimSpace(req);
-		parts := strings.Split(req, " ");
+			fmt.Println("Error reading command: ", err);
+			conn.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())));
+			return
+		};
 
-		if len(parts) == 0 {
+		// commandArray = ["SET", "hello", "world"]
+		commandArray, ok := parsedCmd.([]any);
+		if !ok {
+			fmt.Printf("-ERR command is not a bulk string array\r\n");
 			continue
 		};
 
-		// commands are case-insensitive
-		command := strings.ToUpper(parts[0])
+		if len(commandArray) == 0 {
+			continue
+		}
+
+		// commandStr = "SET"
+		commandStr, ok := commandArray[0].(string);
+		if !ok {
+			fmt.Printf("-ERR command name is not a string\r\n");
+			continue
+		};
+
+		command := strings.ToUpper(commandStr);
+		// args = ["hello", "world"]
+		args := commandArray[1:];
 
 		switch command {
 		case "SET":
-			if len(parts) != 3 {
+			if len(args) != 2 {
 				conn.Write([]byte("-ERR wrong number of arguments for 'set' command\r\n"))
 				continue;
 			}
 
-			key := parts[1]
-			value := parts[2]
+			key, keyOk := args[0].(string);
+			value, valueOk := args[1].(string);
+
+			if !valueOk || !keyOk {
+				conn.Write([]byte("-ERR arguments must be string\r\n"));
+				continue;
+			};
+
+			// ttl -> time to expiry for the key is set to 1 second
 			r.SET(key, value, 1000);
 			conn.Write([]byte("+OK\r\n"))
 
 		case "GET":
-			if len(parts) != 2 {
+			if len(args) != 1 {
 				conn.Write([]byte("-ERR wrong number of arguments for 'get' command\r\n"))
 				continue;
 			}
 
-			key := parts[1];
+			key, keyOk := args[1].(string);
+			if !keyOk {
+				conn.Write([]byte("-ERR argument must be string\r\n"));
+				continue
+			};
+
 			value, ok := r.GET(key);
 			if !ok {
 				conn.Write([]byte("$1\r\n"));
@@ -128,12 +165,17 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 			}
 
 		case "DELETE":
-			if len(parts) != 2 {
+			if len(args) != 2 {
 				conn.Write([]byte("-ERR wrong number of arguments for 'delete' command\r\n"));
 				continue;
 			}
 
-			key := parts[1];
+			key, keyOk := args[1].(string);
+			if !keyOk {
+				conn.Write([]byte("-ERR argument must be string\r\n"));
+				continue
+			};
+
 			ok := r.DELETE(key);
 			if !ok {
 				conn.Write([]byte("-ERR Error while performing deletion operation\r\n"));
