@@ -15,7 +15,7 @@ import (
 // covalent to interfaces/types in typescript
 // explains the structure of value corresponding to any key in the hash map
 type Entry struct {
-	value string
+	value interface{}
 	expiryTime time.Time
 }
 
@@ -30,7 +30,7 @@ func NewRedisServer() *RedisCache {
 	}
 }
 
-func(r *RedisCache) SET(key, value string, ttl int) (string, bool) {
+func(r *RedisCache) SET(key string, value interface{}, ttl int) (string, bool) {
 	r.mu.Lock();
 	defer r.mu.Unlock();
 
@@ -52,7 +52,7 @@ func(r *RedisCache) SET(key, value string, ttl int) (string, bool) {
 	return "Value successfully set to the given key", true;
 }
 
-func(r *RedisCache) GET(key string) (string, bool) {
+func(r *RedisCache) GET(key string) (interface{}, bool) {
 	r.mu.Lock();
 	defer r.mu.Unlock();
 
@@ -159,10 +159,16 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 			if !ok {
 				conn.Write([]byte("$1\r\n"));
 				continue;
-			} else {
-				response := fmt.Sprintf("$%d\r\n%s\r\n", len(value), value); // RESP representation of string
-				conn.Write([]byte(response))
 			}
+
+			stringValue, isString := value.(string);
+			if !isString {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			response := fmt.Sprintf("$%d\r\n%s\r\n", len(stringValue), value); // RESP representation of string
+			conn.Write([]byte(response))
 
 		case "DELETE":
 			if len(args) != 2 {
