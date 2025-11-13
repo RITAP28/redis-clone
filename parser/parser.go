@@ -63,11 +63,8 @@ func parseBulkStrings(reader *bufio.Reader) (string, error) {
 	};
 
 	line = strings.TrimSpace(line);
-	if len(line) == 0 || line[0] != '$' {
-		return "", fmt.Errorf("expected bulk string but received: %s", line);
-	};
 
-	stringLength, err := strconv.Atoi(line[1:]);
+	stringLength, err := strconv.Atoi(line);
 	if err != nil {
 		fmt.Println("Error converting string length from string to integer");
 		return "", err;
@@ -102,6 +99,7 @@ func parseBulkStrings(reader *bufio.Reader) (string, error) {
 }
 
 func parseArrays(reader *bufio.Reader) ([]any, error) {
+	fmt.Println("parsing arrays")
 	// example of an array: *2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n
 	// the array can contain any data type, including bulk strings, integers, simple strings etc
 	line, err := reader.ReadString('\n');
@@ -110,12 +108,14 @@ func parseArrays(reader *bufio.Reader) ([]any, error) {
 		return nil, err;
 	};
 
+	fmt.Println("line: ", line)
 	line = strings.TrimSpace(line);
-	if len(line) == 0 || line[0] != '*' {
-		return nil, fmt.Errorf("expected array but received: %s", line)
-	};
+	// if len(line) == 0 || line[0] != '*' {
+	// 	return nil, fmt.Errorf("expected array but received: %s", line)
+	// };
 
-	arrayLength, err := strconv.Atoi(line[1:]);
+	arrayLength, err := strconv.Atoi(line);
+	fmt.Println("array length: ", arrayLength)
 	// if the array length is -1, it means the array is empty
 	if err != nil {
 		fmt.Println("Error converting array length from string to integer");
@@ -129,14 +129,16 @@ func parseArrays(reader *bufio.Reader) ([]any, error) {
 	};
 
 	result := make([]interface{}, arrayLength);
-	for i := range arrayLength {
+	for i := 0; i < arrayLength; i++ {
 		element, err := HandleRESP(reader);
+		fmt.Println("element inside the array: ", element)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing element %d in array: %w", i, err);
 		};
 		result[i] = element;
 	};
 
+	fmt.Println("result of parsing arrays: ", result)
 	return result, nil;
 };
 

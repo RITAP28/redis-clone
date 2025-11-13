@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,8 +43,10 @@ func(r *RedisCache) SET(key string, value interface{}, ttl int) (string, bool) {
 	// creating a new Entryy struct in the map and initialises it's value with value field
 	// also providing a expiry time as ttl to the expiryTime field of the Entryy struct
 	entry := &Entry{value: value}
+
 	if ttl > 0 {
-		entry.expiryTime = time.Now().Add(time.Duration(ttl) * time.Second);
+		entry.expiryTime = time.Now().Add(time.Duration(ttl) * time.Millisecond);
+		fmt.Printf("expiry time is %v/n", entry.expiryTime.Format("January 2, 2006 at 3:04PM"))
 	};
 
 	r.store[key] = entry;
@@ -58,21 +61,30 @@ func(r *RedisCache) GET(key string) (interface{}, bool) {
 
 	entry, exists := r.store[key];
 	if !exists {
-		return "No key-value pair exists for the given key", false
+		// Key does not exist, signalling this as 'false' boolean
+		return nil, false
 	}
 
 	if !entry.expiryTime.IsZero() && time.Now().After(entry.expiryTime) {
+		// Key has expired, signalling this as 'false' boolean
 		delete(r.store, key);
-		return "", false;
+		return nil, false;
 	}
 	
 	fmt.Println("Value successfully obtained for the given key");
+	// Key exists and is valid, signalling this as 'true' boolean
 	return entry.value, true
 }
 
 func(r *RedisCache) DELETE(key string) bool {
 	r.mu.Lock();
 	defer r.mu.Unlock();
+
+	_, ok := r.store[key]
+	if (!ok) {
+		fmt.Println("Key does not exist")
+		return false
+	}
 
 	delete(r.store, key);
 	fmt.Println("Deleted the given key successfully", key);
@@ -124,6 +136,10 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 		// args = ["hello", "world"]
 		args := commandArray[1:];
 
+		// validating the command and the arguments
+		fmt.Printf("the command is %v\r\n", commandStr)
+		fmt.Printf("the arguments are %v\r\n", args)
+
 		switch command {
 		case "SET":
 			if len(args) != 2 {
@@ -139,8 +155,8 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 				continue;
 			};
 
-			// ttl -> time to expiry for the key is set to 1 second
-			r.SET(key, value, 1000);
+			// ttl -> time to expiry for the key is set to 10 seconds
+			r.SET(key, value, 10000);
 			conn.Write([]byte("+OK\r\n"))
 
 		case "GET":
@@ -149,7 +165,7 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 				continue;
 			}
 
-			key, keyOk := args[1].(string);
+			key, keyOk := args[0].(string);
 			if !keyOk {
 				conn.Write([]byte("-ERR argument must be string\r\n"));
 				continue
@@ -157,7 +173,7 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 
 			value, ok := r.GET(key);
 			if !ok {
-				conn.Write([]byte("$1\r\n"));
+				conn.Write([]byte("$-1\r\n"));
 				continue;
 			}
 
@@ -171,12 +187,12 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 			conn.Write([]byte(response))
 
 		case "DELETE":
-			if len(args) != 2 {
+			if len(args) != 1 {
 				conn.Write([]byte("-ERR wrong number of arguments for 'delete' command\r\n"));
 				continue;
 			}
 
-			key, keyOk := args[1].(string);
+			key, keyOk := args[0].(string);
 			if !keyOk {
 				conn.Write([]byte("-ERR argument must be string\r\n"));
 				continue
@@ -187,6 +203,343 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 				conn.Write([]byte("-ERR Error while performing deletion operation\r\n"));
 				continue;
 			}
+
+			conn.Write([]byte("+OK\r\n"))
+
+		case "LPUSH":
+			if len(args) < 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'LPUSH' command\r\n"))
+				continue
+			}
+
+			key, keyOk := args[0].(string)
+			if !keyOk {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			// remaining arguments in the commandArray are values corresponding to the key
+			values := []string{}
+			for _, arg := range args[1:] {
+				val, ok := arg.(string)
+				if !ok {
+					conn.Write([]byte("-ERR all values must be strings\r\n"))
+					continue
+				}
+
+				values = append(values, val)
+			}
+
+			// calling the LPUSH implementation
+			listLength, ok := r.LPUSH(key, values...)
+			if !ok {
+				fmt.Println("something went wrong while processing lists")
+				continue
+			}
+
+			conn.Write([]byte(fmt.Sprintf(":%d\r\n", listLength)))
+
+		case "RPUSH":
+			if len(args) < 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'RPUSH' command\r\n"))
+				continue
+			}
+
+			key, ok := args[0].(string)
+			if !ok {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			values := []string{}
+			for _, arg := range args[1:] {
+				val, ok := arg.(string)
+				if !ok {
+					conn.Write([]byte("-ERR all values must be strings\r\n"))
+					continue
+				}
+
+				values = append(values, val)
+			}
+
+			listLength, ok := r.RPUSH(key, values)
+			if !ok {
+				conn.Write([]byte("-ERR values could not be pushed\r\n"))
+				continue
+			}
+
+			conn.Write([]byte(fmt.Sprintf(":%d\r\n", listLength)))
+
+		case "LRANGE":
+			// example command: LRANGE myItems 1 2
+			// arguments derived from the command: ["myItems", myItems[1], muItems[2]]
+			// args[0] = "myItems" --> key
+			if len(args) < 3 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'LRANGE' command\r\n"))
+				continue
+			}
+
+			// parsing the key
+			key, ok := args[0].(string)
+			if !ok {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			// after parsing, the parser reads everything as strings
+			// so need to convert strings to integers using strconv.Atoi()
+			// converting start & end indices (they come as strings)
+			startStr, ok1 := args[1].(string)
+			endStr, ok2 := args[2].(string)
+			if !ok1 || !ok2 {
+				conn.Write([]byte("-ERR indices must be strings\r\n"))
+				continue
+			}
+
+			start, err1 := strconv.Atoi(startStr)
+			end, err2 := strconv.Atoi(endStr)
+			if err1 != nil || err2 != nil {
+				conn.Write([]byte("-ERR start and end indices must be integers\r\n"))
+				continue
+			}
+
+			list, ok := r.LRANGE(key, start, end)
+			fmt.Println("list: ", list)
+			if !ok {
+				conn.Write([]byte("-ERR list not found or invalid range\r\n"))
+				continue
+			}
+
+			// list is of type interface{}
+			items, ok := list.([]string)
+			fmt.Println("items: ", items)
+			if !ok {
+				conn.Write([]byte("-ERR internal type error\r\n"))
+				continue
+			}
+
+			// formatting like Redis output
+			var response string
+			response = fmt.Sprintf("*%d\r\n", len(items))
+			for _,v := range items {
+				// response += fmt.Sprintf("$%d) \"%s\"\r\n", i+1, v)
+				response += fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)
+			}
+
+			conn.Write([]byte(response))
+
+		case "LPOP":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'LPOP' command\r\n"))
+				continue
+			}
+
+			// parsing the key
+			key, ok := args[0].(string)
+			if !ok {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			poppedElement, ok := r.LPOP(key)
+			if !ok {
+				conn.Write([]byte("-ERR list not found or invalid\r\n"))
+				continue
+			}
+
+			conn.Write([]byte(poppedElement))
+
+		case "RPOP":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'RPOP' command\r\n"))
+				continue
+			}
+
+			// parsing the key
+			key, ok := args[0].(string)
+			if !ok {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			poppedElement, ok := r.RPOP(key)
+			if !ok {
+				conn.Write([]byte("-ERR list not found or invalid\r\n"))
+				continue
+			}
+
+			conn.Write([]byte(poppedElement))
+
+		case "LLEN":
+			// command syntax: LLEN key --> args = [1]
+			if len(args) != 1 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'LLEN' command\r\n"))
+				continue
+			}
+
+			key, ok := args[0].(string)
+			if !ok {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			listLength, ok := r.LLEN(key)
+			if !ok {
+				conn.Write([]byte(":0\r\n")) // sending 0 if key doesn't exist
+				continue
+			}
+
+			conn.Write([]byte(fmt.Sprintf(":%d\r\n", listLength)))
+		
+		case "LINDEX":
+			// command syntax: LINDEX key index --> args = [key, index]
+			if len(args) != 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'LINDEX' command\r\n"))
+				continue
+			}
+
+			key, ok := args[0].(string)
+			if !ok {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			index, ok := args[1].(string)
+			if !ok {
+				conn.Write([]byte("-ERR index is required\r\n"))
+				continue
+			}
+
+			reqIndex, err := strconv.Atoi(index)
+			if err != nil {
+				conn.Write([]byte("-ERR index must be integer\r\n"))
+				continue
+			}
+
+			element, ok := r.LINDEX(key, reqIndex)
+			if !ok {
+				conn.Write([]byte("$-1\r\n"))
+				continue
+			}
+
+			conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(element), element)))
+
+		case "LSET":
+			// command syntax: LSET key index element (LSET myList 0 "four")
+			if len(args) != 3 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'LSET' command\r\n"))
+				continue
+			}
+
+			// checking & validating key, index & element
+			key, ok := args[0].(string)
+			if !ok {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+			indexStr, ok := args[1].(string)
+			if !ok {
+				conn.Write([]byte("-ERR index must be provided\r\n"))
+				continue
+			}
+			element, ok := args[2].(string)
+			if !ok {
+				conn.Write([]byte("-ERR element must be string\r\n"))
+				continue
+			}
+
+			// type conversion for index, from string to integer
+			indexInt, err := strconv.Atoi(indexStr)
+			if err != nil {
+				conn.Write([]byte("-ERR error converting index to integer\r\n"))
+				continue
+			}
+
+			// calling the .LSET function
+			ok = r.LSET(key, indexInt, element)
+			if !ok {
+				conn.Write([]byte("-ERR index out of bounds or argument invalid\r\n"))
+				continue
+			}
+
+			conn.Write([]byte("+OK\r\n"))
+
+		case "LREM":
+			// command syntax: LREM key count element (LREM myList -2 "hello")
+			if len(args) != 3 {
+				conn.Write([]byte("-ERR wrong number of arguments for '' command\r\n"))
+				continue
+			}
+
+			key, keyOk := args[0].(string)
+			count, countOk := args[1].(string)
+			element, elementOk := args[2].(string)
+
+			if !keyOk || !countOk || !elementOk {
+				conn.Write([]byte("-ERR arguments provided are of wrong types\r\n"))
+				continue
+			}
+
+			countInt, err := strconv.Atoi(count)
+			if err != nil {
+				conn.Write([]byte("-ERR error converting integer to string"))
+				continue
+			}
+
+			removed, ok := r.LREM(key, countInt, element)
+			if !ok {
+				conn.Write([]byte("-ERR something went wrong\r\n"))
+				continue
+			}
+
+			strRemoved := strconv.Itoa(removed)
+			fmt.Fprintf(conn, "$%d\r\n%s\r\n", len(strRemoved), strRemoved)
+
+		case "LTRIM":
+			// command syntax: LTRIM key start stop --> args = [key, start, stop]
+			if len(args) != 3 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'LTRIM' command\r\n"))
+				continue
+			}
+
+			key, keyOk := args[0].(string)
+			start, startOk := args[1].(string)
+			stop, stopOk := args[2].(string)
+
+			if !keyOk || !startOk || !stopOk {
+				conn.Write([]byte("-ERR arguments are of wrong types\r\n"))
+				continue
+			}
+
+			startInt, err1 := strconv.Atoi(start)
+			stopInt, err2 := strconv.Atoi(stop)
+
+			if err1 != nil || err2 != nil {
+				conn.Write([]byte("-ERR start and stop indices must be integers\r\n"))
+				continue
+			}
+
+			list, ok := r.LTRIM(key, startInt, stopInt)
+			if !ok {
+				conn.Write([]byte("-ERR list not found or invalid range\r\n"))
+				continue
+			}
+
+			// list is of type interface{}
+			items, ok := list.([]string)
+			fmt.Println("items: ", items)
+			if !ok {
+				conn.Write([]byte("-ERR internal type error\r\n"))
+				continue
+			}
+
+			var response string
+			response = fmt.Sprintf("*%d\r\n", len(items))
+			for _, v := range items {
+				response += fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)
+			}
+
+			conn.Write([]byte(response))
 
 		default:
 			conn.Write([]byte("-ERR unknown command '" + command + "'\r\n"))

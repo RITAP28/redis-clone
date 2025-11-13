@@ -22,7 +22,7 @@ func TestHandleRESP_Arrays(t *testing.T) {
 		},
 		{
 			name: "Simple GET command",
-			input: "*2\r\n$3\r\nGET\r\nhello\r\n",
+			input: "*2\r\n$3\r\nGET\r\n$5\r\nhello\r\n",
 			expected: []interface{}{"GET", "hello"},
 			expectError: false,
 		},
@@ -40,7 +40,7 @@ func TestHandleRESP_Arrays(t *testing.T) {
 		},
 		{
 			name: "Malformed Array (wrong count)",
-			input: "*3\r\n$3\r\nGET\r\n$3\r\nhello\r\n",
+			input: "*3\r\n$3\r\nGET\r\n$5\r\nhello\r\n",
 			expectError: true,
 		},
 	};

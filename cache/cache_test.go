@@ -86,9 +86,13 @@ func TestConcurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	numGoRoutines := 100;
 
+	// adding the total number of go-routines to the wait-group so that 
+	// the counter does not turn negative and panics
+	wg.Add(numGoRoutines);
+
 	// we will have 100 goroutines all trying to SET and GET at the same time
 	// if the mutex is working, this will not crash with a "concurrent map write" error
-	for i := 0; i < numGoRoutines; i++ {
+	for i := range numGoRoutines {
 		go func (i int) {
 			defer wg.Done();
 			key := "concurrent_key"

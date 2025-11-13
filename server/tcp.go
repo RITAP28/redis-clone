@@ -11,7 +11,7 @@ import (
 func StartServer(addr string, r *cache.RedisCache) error {
 	ln, err := net.Listen("tcp", addr);
 	if err != nil {
-		fmt.Println("error occured");
+		fmt.Println("error occured while starting the server: ", err);
 		os.Exit(1);
 		return err;
 	}
@@ -20,7 +20,7 @@ func StartServer(addr string, r *cache.RedisCache) error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			fmt.Println("Error accepting: ", err.Error());
+			fmt.Println("Error while accepting requests: ", err.Error());
 			continue;
 		}
 		fmt.Println("Client connected");
