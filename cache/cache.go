@@ -672,6 +672,145 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 
 			conn.Write([]byte(response))
 
+		case "HSET":
+			if len(args) < 3 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'HSET' command\r\n"))
+				continue
+			}
+
+			key, ok := args[0].(string)
+			if !ok {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			fields := []string{}
+			for i:=1; i<len(args); i=i+2 {
+				fields = append(fields, args[i].(string))
+			}
+
+			values := []string{}
+			for i:=2; i<len(args); i=i+2 {
+				values = append(values, args[i].(string))
+			}
+
+			fieldValues := make(map[string]string)
+			for idx, v := range fields {
+				fieldValues[v] = values[idx]
+			}
+
+			result, isOk := r.HSET(key, fieldValues)
+			if !isOk {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			fmt.Fprintf(conn, ":%d\r\n", result)
+
+		case "HGET":
+			if len(args) < 3 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'HGET' command\r\n"))
+				continue
+			}
+
+			key, ok1 := args[0].(string)
+			if !ok1 {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			field, ok2 := args[1].(string)
+			if !ok2 {
+				conn.Write([]byte("-ERR field must be string\r\n"))
+				continue
+			}
+
+			result, ok3 := r.HGET(key, field)
+			if !ok3 {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			fmt.Fprintf(conn, ":%s\r\n", result)
+
+		case "HGETALL":
+			if len(args) < 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'HGET' command\r\n"))
+				continue
+			}
+
+			key, ok1 := args[0].(string)
+			if !ok1 {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			result, ok2 := r.HGETALL(key)
+			if !ok2 {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			var response string
+			response = fmt.Sprintf("*%d\r\n", len(result))
+			for _,v := range result {
+				response += fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)
+			}
+
+			conn.Write([]byte(response))
+
+		case "HDEL":
+			if len(args) < 3 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'HGET' command\r\n"))
+				continue
+			}
+
+			key, ok1 := args[0].(string)
+			if !ok1 {
+				conn.Write([]byte("-ERR key and field must be string\r\n"))
+				continue
+			}
+
+			field := args[1:]
+			fields := []string{}
+			for _, v := range field {
+				if _, ok := v.(string); !ok {
+					continue
+				}
+				vStr := v.(string)
+				fields = append(fields, vStr)
+			}
+
+			result, ok := r.HDEL(key, fields)
+			if !ok {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			resultInt := strconv.Itoa(result)
+			fmt.Fprintf(conn, ":%v\r\n", resultInt)
+
+		case "HLEN":
+			// command syntax: HLEN key
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'HGET' command\r\n"))
+				continue
+			}
+
+			key, ok1 := args[0].(string)
+			if !ok1 {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			result, ok2 := r.HLEN(key)
+			if !ok2 {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			resultInt := strconv.Itoa(result)
+			fmt.Fprintf(conn, ":%v\r\n", resultInt)
 
 		default:
 			conn.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
