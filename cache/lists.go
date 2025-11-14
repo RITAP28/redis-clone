@@ -4,7 +4,6 @@ import "fmt"
 
 
 func(r *RedisCache) LPUSH(key string, values ...string) (int, bool) {
-	fmt.Println("inside LPUSH command function")
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

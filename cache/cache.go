@@ -541,6 +541,138 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 
 			conn.Write([]byte(response))
 
+		case "SADD":
+			// example command: SADD key member [member ...]
+			if len(args) < 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'SADD' command\r\n"))
+				continue
+			}
+
+			key, keyOk := args[0].(string)
+			if !keyOk {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			members := []string{}
+			for _, v := range args[1:] {
+				member, ok := v.(string)
+				if !ok {
+					conn.Write([]byte("-ERR members must be string\r\n"))
+					continue
+				}
+				members = append(members, member)
+			}
+
+			added, ok := r.SADD(key, members)
+			if !ok {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			conn.Write([]byte(fmt.Sprintf(":%d\r\n", added)))
+
+		case "SISMEMBER":
+			if len(args) < 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'SISMEMBER' command\r\n"))
+				continue
+			}
+
+			key, keyOk := args[0].(string)
+			member, memberOk := args[1].(string)
+			if !keyOk || !memberOk {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			result, ok := r.SISMEMBER(key, member)
+			if !ok {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			resultInt := strconv.Itoa(result)
+
+			fmt.Fprintf(conn, ":%v\r\n", resultInt)
+
+		case "SREM":
+			// example command: SREM key member [member...]
+			if len(args) < 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'SREM' command\r\n"))
+				continue
+			}
+
+			key, keyOk := args[0].(string)
+			if !keyOk {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			members := []string{}
+			for _, v := range args[1:] {
+				memberStr, ok := v.(string)
+				if !ok {
+					conn.Write([]byte("-ERR member shall be string\r\n"))
+				}
+				members = append(members, memberStr)
+			}
+
+			result, ok := r.SREM(key, members)
+			if !ok {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			fmt.Fprintf(conn, ":%v\r\n", result)
+
+		case "SCARD":
+			// command syntax: SCARD key (SCARD list)
+			if len(args) != 1 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'SCARD' command\r\n"))
+				continue
+			}
+
+			key, keyOk := args[0].(string)
+			if !keyOk {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			result, ok := r.SCARD(key)
+			if !ok {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			fmt.Fprintf(conn, ":%v\r\n", result)
+
+		case "SMEMBERS":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'SMEMBERS' command\r\n"))
+				continue
+			}
+
+			key, keyOk := args[0].(string)
+			if !keyOk {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			members, ok := r.SMEMBERS(key)
+			if !ok {
+				conn.Write([]byte("*0\r\n")) // returning empty set
+				continue
+			}
+
+			var response string
+			response = fmt.Sprintf("*%d\r\n", len(members))
+			for _, v := range members {
+				response += fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)
+			}
+
+			conn.Write([]byte(response))
+
+
 		default:
 			conn.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
 		}
