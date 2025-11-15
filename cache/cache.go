@@ -31,6 +31,24 @@ func NewRedisServer() *RedisCache {
 	}
 }
 
+func(r *RedisCache) StartExpiryCleaner(interval time.Duration) {
+	// this function runs continuously in the background to delete the expired keys
+	// go func() { ... }() --> runs the cleaner function asynchronously, in a background goroutine
+	go func() {
+		for {
+			time.Sleep(interval)
+				
+			r.mu.Lock()
+			for key, entry := range r.store {
+				if !entry.expiryTime.IsZero() && time.Now().After(entry.expiryTime) {
+					delete(r.store, key)
+				}
+			}
+			r.mu.Unlock()
+		}
+	}()
+}
+
 func(r *RedisCache) SET(key string, value interface{}, ttl int) (string, bool) {
 	r.mu.Lock();
 	defer r.mu.Unlock();
@@ -811,6 +829,74 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 
 			resultInt := strconv.Itoa(result)
 			fmt.Fprintf(conn, ":%v\r\n", resultInt)
+
+		case "EXPIRE":
+			// command syntax: EXPIRE key seconds
+			if len(args) < 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'EXPIRE' command\r\n"))
+				continue
+			}
+
+			key, ok1 := args[0].(string)
+			if !ok1 {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			seconds, ok2 := args[1].(string)
+			if !ok2 {
+				conn.Write([]byte("-ERR seconds must be string\r\n"))
+				continue
+			}
+
+			secondsInt, err := strconv.Atoi(seconds)
+			if err != nil {
+				conn.Write([]byte("-ERR operation failed while converting seconds to integer\r\n"))
+				continue
+			}
+
+			result, ok := r.EXPIRE(key, secondsInt)
+			if !ok {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			fmt.Fprintf(conn, ":%d\r\n", result)
+
+		case "PEXPIRE":
+			// command syntax: PEXPIRE key milliseconds
+			if len(args) < 2 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'PEXPIRE' command\r\n"))
+				continue
+			}
+
+			key, ok1 := args[0].(string)
+			if !ok1 {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			ms, ok2 := args[1].(string)
+			if !ok2 {
+				conn.Write([]byte("-ERR milliseconds must be string\r\n"))
+				continue
+			}
+
+			msInt, err := strconv.Atoi(ms)
+			if err != nil {
+				conn.Write([]byte("-ERR operation failed while converting milliseconds to integer\r\n"))
+				continue
+			}
+
+			result, ok := r.EXPIRE(key, msInt)
+			if !ok {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			fmt.Fprintf(conn, ":%d\r\n", result)
+
+		
 
 		default:
 			conn.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
