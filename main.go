@@ -12,8 +12,8 @@ func main() {
 
 	redisServer := cache.NewRedisServer();
 
-	// purging expired keys every 10 seconds in the background
-	redisServer.StartExpiryCleaner(10 * time.Second)
+	// purging expired keys every 20 seconds in the background
+	redisServer.StartExpiryCleaner(20 * time.Second)
 
 	err := server.StartServer(":8080", redisServer);
 	if err != nil {

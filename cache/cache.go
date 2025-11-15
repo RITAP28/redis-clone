@@ -50,6 +50,10 @@ func(r *RedisCache) StartExpiryCleaner(interval time.Duration) {
 }
 
 func(r *RedisCache) SET(key string, value interface{}, ttl int) (string, bool) {
+	// Atomic SET with expiration: Only the SET command has built-in options to set expiration atomically!
+	// command example: SET hello "world" EX 10 or SET hello "world" PX 10000 (both expire in 10 seconds)
+	// the above ATOMIC EXPIRATION needs to be implemented!
+
 	r.mu.Lock();
 	defer r.mu.Unlock();
 
@@ -888,7 +892,7 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 				continue
 			}
 
-			result, ok := r.EXPIRE(key, msInt)
+			result, ok := r.PEXPIRE(key, msInt)
 			if !ok {
 				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
 				continue
@@ -896,7 +900,62 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 
 			fmt.Fprintf(conn, ":%d\r\n", result)
 
-		
+		case "TTL":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'TTL' command\r\n"))
+				continue
+			}
+
+			key, ok1 := args[0].(string)
+			if !ok1 {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			result, ok2 := r.TTL(key)
+			if !ok2 {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			resultInt := strconv.Itoa(result)
+			fmt.Fprintf(conn, ":%s\r\n", resultInt)
+
+		case "PTTL":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'PTTL' command\r\n"))
+				continue
+			}
+
+			key, ok1 := args[0].(string)
+			if !ok1 {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			result, ok2 := r.PTTL(key)
+			if !ok2 {
+				conn.Write([]byte("-WRONGTYPE operation against a key holding the wrong kind of value\r\n"))
+				continue
+			}
+
+			resultInt := strconv.Itoa(result)
+			fmt.Fprintf(conn, ":%s\r\n", resultInt)
+
+		case "PERSIST":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR wrong number of arguments for 'PTTL' command\r\n"))
+				continue
+			}
+
+			key, ok1 := args[0].(string)
+			if !ok1 {
+				conn.Write([]byte("-ERR key must be string\r\n"))
+				continue
+			}
+
+			result := r.PERSIST(key)
+			fmt.Fprintf(conn, ":%d\r\n", result)
 
 		default:
 			conn.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
