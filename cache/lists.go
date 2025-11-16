@@ -22,8 +22,8 @@ func(r *RedisCache) LPUSH(key string, values ...string) (int, bool) {
 			// list = append(list, values[i])
 		}
 
-		// then, assigning the list to entry.value
-		entry = &Entry{value: list}
+		// then, assigning the list to entry.Value
+		entry = &Entry{Type: "list", Value: list}
 		
 		// storing the list corresponding to the key and returning the length of the list
 		r.store[key] = entry
@@ -36,7 +36,7 @@ func(r *RedisCache) LPUSH(key string, values ...string) (int, bool) {
 	// for example: existing list = ['a', 'b'] & values = ['c', 'd']
 	// expected resultant list: lst = ['d', 'c', 'a', 'b']
 
-	lst, isList := entry.value.([]string)
+	lst, isList := entry.Value.([]string)
 	if !isList {
 		fmt.Println("wrong type WRONGTYPE")
 		return 0, false
@@ -46,7 +46,7 @@ func(r *RedisCache) LPUSH(key string, values ...string) (int, bool) {
 		lst = append([]string{values[i]}, lst...)
 	}
 
-	entry.value = lst
+	entry.Value = lst
 	r.store[key] = entry
 
 	fmt.Println("after creating a new list and prepending values: ", lst)
@@ -60,18 +60,18 @@ func(r *RedisCache) RPUSH(key string, values []string) (int, bool) {
 	entry, exists := r.store[key]
 	if !exists {
 		list := append([]string{}, values...)
-		entry = &Entry{value: list}
+		entry = &Entry{Type: "list", Value: list}
 		r.store[key] = entry
 		return len(list), true
 	}
 
-	lst, isList := entry.value.([]string)
+	lst, isList := entry.Value.([]string)
 	if !isList {
 		return 0, false
 	}
 
 	lst = append(lst, values...)
-	entry.value = lst
+	entry.Value = lst
 	r.store[key] = entry
 
 	return len(lst), true
@@ -87,7 +87,7 @@ func(r *RedisCache) LRANGE(key string, start int, end int) (interface{}, bool) {
 		return nil, false
 	}
 
-	values, isList := entry.value.([]string)
+	values, isList := entry.Value.([]string)
 	if !isList {
 		return nil, false
 	}
@@ -154,7 +154,7 @@ func(r *RedisCache) LPOP(key string) (string, bool) {
 	}
 
 	// extracting the list into the values variable
-	values, isList := entry.value.([]string)
+	values, isList := entry.Value.([]string)
 	if !isList {
 		return "incorrect type found", false
 	}
@@ -166,7 +166,7 @@ func(r *RedisCache) LPOP(key string) (string, bool) {
 	// replacing the old list with 'newList' i.e., the sliced list
 	// returning the popped element
 	newList := values[1:length-1]
-	entry.value = newList
+	entry.Value = newList
 
 	return poppedElement, true
 }
@@ -186,7 +186,7 @@ func(r *RedisCache) RPOP(key string) (string, bool) {
 	}
 
 	// extracting the list into the values variable
-	values, isList := entry.value.([]string)
+	values, isList := entry.Value.([]string)
 	if !isList {
 		return "incorrect type found", false
 	}
@@ -195,7 +195,7 @@ func(r *RedisCache) RPOP(key string) (string, bool) {
 	poppedElement := values[length-1]
 	newList := values[0:length-2]
 
-	entry.value = newList
+	entry.Value = newList
 	return poppedElement, true
 }
 
@@ -208,7 +208,7 @@ func(r *RedisCache) LLEN(key string) (int, bool) {
 		return 0, false
 	}
 
-	values, isList := entry.value.([]string)
+	values, isList := entry.Value.([]string)
 	if !isList {
 		return 0, false
 	}
@@ -220,7 +220,7 @@ func(r *RedisCache) LLEN(key string) (int, bool) {
 
 func(r *RedisCache) LINDEX(key string, index int) (string, bool) {
 	// command example: LINDEX key index
-	// if index > length(entry.value), then (nil) is returned
+	// if index > length(entry.Value), then (nil) is returned
 	// if index is negative, then the index starts from the last --> -1 = last element; -2 = penultimate element
 
 	r.mu.Lock()
@@ -231,7 +231,7 @@ func(r *RedisCache) LINDEX(key string, index int) (string, bool) {
 		return "", false
 	}
 
-	values, isList := entry.value.([]string)
+	values, isList := entry.Value.([]string)
 	if !isList {
 		return "", false
 	}
@@ -265,7 +265,7 @@ func(r*RedisCache) LSET(key string, index int, element string) (bool) {
 		return false
 	}
 
-	values, isList := entry.value.([]string)
+	values, isList := entry.Value.([]string)
 	if !isList {
 		return false
 	}
@@ -301,7 +301,7 @@ func(r *RedisCache) LREM(key string, count int, element string) (int, bool) {
 		return 0, true
 	}
 
-	values, isList := entry.value.([]string)
+	values, isList := entry.Value.([]string)
 	if !isList {
 		return 0, false
 	}
@@ -363,7 +363,7 @@ func(r *RedisCache) LREM(key string, count int, element string) (int, bool) {
 	}
 
 	// assigning the newList to the key
-	entry.value = newList
+	entry.Value = newList
 	return removed, true
 }
 
@@ -377,7 +377,7 @@ func(r *RedisCache) LTRIM(key string, start int, stop int) (interface{}, bool) {
 		return nil, false
 	}
 
-	values, isList := entry.value.([]string)
+	values, isList := entry.Value.([]string)
 	if !isList {
 		return nil, false
 	}
@@ -406,8 +406,8 @@ func(r *RedisCache) LTRIM(key string, start int, stop int) (interface{}, bool) {
 
 	if start > stop {
 		// empty list will be returned
-		entry.value = []string{}
-		return entry.value, true
+		entry.Value = []string{}
+		return entry.Value, true
 	}
 
 	newList := []string{}
@@ -415,7 +415,7 @@ func(r *RedisCache) LTRIM(key string, start int, stop int) (interface{}, bool) {
 		newList = append(newList, values[i])
 	}
 
-	entry.value = newList
+	entry.Value = newList
 	return newList, true
 }
 

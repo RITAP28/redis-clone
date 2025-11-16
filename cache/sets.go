@@ -20,13 +20,13 @@ func(r *RedisCache) SADD(key string, members []string) (int, bool) {
 				added++
 			}
 		}
-		r.store[key] = &Entry{value: newSet}
+		r.store[key] = &Entry{Type: "set", Value: newSet}
 		return added, true
 	}
 
 	// see if any one member already exists inside the set
 	// if yes, that member is not added into the set again, simply ignored
-	set, isSet := entry.value.(map[string]struct{})
+	set, isSet := entry.Value.(map[string]struct{})
 	if !isSet {
 		return 0, false
 	}
@@ -39,7 +39,7 @@ func(r *RedisCache) SADD(key string, members []string) (int, bool) {
 		}
 	}
 
-	entry.value = set
+	entry.Value = set
 	r.store[key] = entry
 
 	return added, true
@@ -54,7 +54,7 @@ func(r *RedisCache) SISMEMBER(key string, member string) (int, bool) {
 		return 0, false
 	}
 
-	set, isSet := entry.value.(map[string]struct{})
+	set, isSet := entry.Value.(map[string]struct{})
 	if !isSet {
 		return 0, false
 	}
@@ -83,7 +83,7 @@ func(r *RedisCache) SREM(key string, members []string) (int, bool) {
 		return 0, false
 	}
 
-	set, isSet := entry.value.(map[string]struct{})
+	set, isSet := entry.Value.(map[string]struct{})
 	if !isSet {
 		return 0, false
 	}
@@ -111,7 +111,7 @@ func(r *RedisCache) SCARD(key string) (int, bool) {
 		return 0, false
 	}
 
-	set, isSet := entry.value.(map[string]struct{})
+	set, isSet := entry.Value.(map[string]struct{})
 	if !isSet {
 		return 0, false
 	}
@@ -131,7 +131,7 @@ func(r *RedisCache) SMEMBERS(key string) ([]string, bool) {
 		return nil, false
 	}
 
-	set, isSet := entry.value.(map[string]struct{})
+	set, isSet := entry.Value.(map[string]struct{})
 	if !isSet {
 		return nil, false
 	}

@@ -10,7 +10,10 @@ import (
 func main() {
 	fmt.Println("Launching server...");
 
-	redisServer := cache.NewRedisServer();
+	redisServer := cache.NewRedisServer()
+
+	// loading saved data --> persistence
+	redisServer.LoadData("dump.rgb.json")
 
 	// purging expired keys every 20 seconds in the background
 	redisServer.StartExpiryCleaner(20 * time.Second)

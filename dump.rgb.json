@@ -1,0 +1,26 @@
+{
+ "hello": {
+  "type": "string",
+  "value": "world",
+  "expiryTime": "0001-01-01T00:00:00Z"
+ },
+ "numbers": {
+  "type": "list",
+  "value": [
+   "one",
+   "two",
+   "three",
+   "four"
+  ],
+  "expiryTime": "0001-01-01T00:00:00Z"
+ },
+ "users:registered": {
+  "type": "set",
+  "value": {
+   "user:alpha": {},
+   "user:beta": {},
+   "user:gamma": {}
+  },
+  "expiryTime": "0001-01-01T00:00:00Z"
+ }
+}

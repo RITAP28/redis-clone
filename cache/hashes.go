@@ -11,11 +11,11 @@ func(r *RedisCache) HSET(key string, fieldValues map[string]string) (int, bool) 
 		for field, value := range fieldValues {
 			hashTable[field] = value
 		}
-		r.store[key] = &Entry{value: hashTable}
+		r.store[key] = &Entry{Type: "hash", Value: hashTable}
 		return len(hashTable), true
 	}
 
-	hashTable, ok := entry.value.(map[string]string)
+	hashTable, ok := entry.Value.(map[string]string)
 	if !ok {
 		return -1, false // WRONGTYPE error in real Redis
 	}
@@ -43,7 +43,7 @@ func(r *RedisCache) HGET(key string, field string) (string, bool) {
 		return "", false
 	}
 
-	hash := entry.value.(map[string]string)
+	hash := entry.Value.(map[string]string)
 	return hash[field], true
 }
 
@@ -57,7 +57,7 @@ func(r *RedisCache) HGETALL(key string) (map[string]string, bool) {
 		return nil, false
 	}
 
-	hash, ok := entry.value.(map[string]string)
+	hash, ok := entry.Value.(map[string]string)
 	if !ok {
 		return nil, false
 	}
@@ -75,7 +75,7 @@ func(r *RedisCache) HDEL(key string, fields []string) (int, bool) {
 	}
 
 	// getting the hashtable
-	hashTable := entry.value.(map[string]string)
+	hashTable := entry.Value.(map[string]string)
 
 	// getting the length of the hashtable
 	// then checking if there are no elements inside hashtable, then the whole hashtable shall be deleted
@@ -105,7 +105,7 @@ func(r *RedisCache) HLEN(key string) (int, bool) {
 		return 0, false
 	}
 
-	hashTable := entry.value.(map[string]string)
+	hashTable := entry.Value.(map[string]string)
 
 	return len(hashTable), true
 }

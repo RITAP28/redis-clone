@@ -30,7 +30,7 @@ func(r *RedisCache) EXPIRE(key string, seconds int) (int, bool) {
 	}
 
 	// setting the expiry time for the key in seconds
-	entry.expiryTime = time.Now().Add(time.Duration(seconds) * time.Second)
+	entry.ExpiryTime = time.Now().Add(time.Duration(seconds) * time.Second)
 	return 1, true
 }
 
@@ -53,7 +53,7 @@ func(r *RedisCache) PEXPIRE(key string, ms int) (int, bool) {
 	}
 
 	// setting the expiry time for the key in milliseconds
-	entry.expiryTime = time.Now().Add(time.Duration(ms) * time.Millisecond)
+	entry.ExpiryTime = time.Now().Add(time.Duration(ms) * time.Millisecond)
 	return 1, true
 }
 
@@ -67,12 +67,12 @@ func(r *RedisCache) TTL(key string) (int, bool) {
 	}
 
 	// checking whether the key has expiration set or not
-	if entry.expiryTime.IsZero() {
+	if entry.ExpiryTime.IsZero() {
 		// key has no expiration set
 		return -1, true
 	}
 
-	remaining := time.Until(entry.expiryTime)
+	remaining := time.Until(entry.ExpiryTime)
 	if remaining <= 0 {
 		return -2, true // key has expired but not yet cleaned up
 	}
@@ -90,11 +90,11 @@ func(r *RedisCache) PTTL(key string) (int, bool) {
 		return -2, true
 	}
 
-	if entry.expiryTime.IsZero() {
+	if entry.ExpiryTime.IsZero() {
 		return -1, true
 	}
 
-	remaining := time.Until(entry.expiryTime)
+	remaining := time.Until(entry.ExpiryTime)
 	if remaining <= 0 {
 		return -2, true
 	}
@@ -117,11 +117,11 @@ func(r *RedisCache) PERSIST(key string) int {
 	}
 
 	// no expiration set to begin with, so 0 is returned
-	if entry.expiryTime.IsZero() {
+	if entry.ExpiryTime.IsZero() {
 		return 0
 	}
 
 	// removing expiry for the key
-	entry.expiryTime = time.Time{}
+	entry.ExpiryTime = time.Time{}
 	return 1
 }

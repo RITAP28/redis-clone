@@ -16,8 +16,9 @@ import (
 // covalent to interfaces/types in typescript
 // explains the structure of value corresponding to any key in the hash map
 type Entry struct {
-	value interface{}
-	expiryTime time.Time
+	Type 		string			`json:"type"`
+	Value 		interface{}		`json:"value"`
+	ExpiryTime 	time.Time		`json:"expiryTime"`
 }
 
 type RedisCache struct {
@@ -40,7 +41,7 @@ func(r *RedisCache) StartExpiryCleaner(interval time.Duration) {
 				
 			r.mu.Lock()
 			for key, entry := range r.store {
-				if !entry.expiryTime.IsZero() && time.Now().After(entry.expiryTime) {
+				if !entry.ExpiryTime.IsZero() && time.Now().After(entry.ExpiryTime) {
 					delete(r.store, key)
 				}
 			}
@@ -64,11 +65,11 @@ func(r *RedisCache) SET(key string, value interface{}, ttl int) (string, bool) {
 
 	// creating a new Entryy struct in the map and initialises it's value with value field
 	// also providing a expiry time as ttl to the expiryTime field of the Entryy struct
-	entry := &Entry{value: value}
+	entry := &Entry{Type: "string", Value: value}
 
 	if ttl > 0 {
-		entry.expiryTime = time.Now().Add(time.Duration(ttl) * time.Millisecond);
-		fmt.Printf("expiry time is %v/n", entry.expiryTime.Format("January 2, 2006 at 3:04PM"))
+		entry.ExpiryTime = time.Now().Add(time.Duration(ttl) * time.Millisecond);
+		fmt.Printf("expiry time is %v/n", entry.ExpiryTime.Format("January 2, 2006 at 3:04PM"))
 	};
 
 	r.store[key] = entry;
@@ -87,7 +88,7 @@ func(r *RedisCache) GET(key string) (interface{}, bool) {
 		return nil, false
 	}
 
-	if !entry.expiryTime.IsZero() && time.Now().After(entry.expiryTime) {
+	if !entry.ExpiryTime.IsZero() && time.Now().After(entry.ExpiryTime) {
 		// Key has expired, signalling this as 'false' boolean
 		delete(r.store, key);
 		return nil, false;
@@ -95,7 +96,7 @@ func(r *RedisCache) GET(key string) (interface{}, bool) {
 	
 	fmt.Println("Value successfully obtained for the given key");
 	// Key exists and is valid, signalling this as 'true' boolean
-	return entry.value, true
+	return entry.Value, true
 }
 
 func(r *RedisCache) DELETE(key string) bool {
@@ -956,6 +957,16 @@ func (r *RedisCache) HandleConnection (conn net.Conn) {
 
 			result := r.PERSIST(key)
 			fmt.Fprintf(conn, ":%d\r\n", result)
+
+		case "SAVE":
+			err := r.SaveToDisk("dump.rgb.json")
+			if err != nil {
+				conn.Write([]byte("-ERR error while saving file to disc\r\n"))
+				continue
+			}
+
+			fmt.Println("data loaded onto disc with saved data")
+			conn.Write([]byte("+OK\r\n"))
 
 		default:
 			conn.Write([]byte("-ERR unknown command '" + command + "'\r\n"))
