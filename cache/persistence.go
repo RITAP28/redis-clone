@@ -26,6 +26,10 @@ func(r *RedisCache) SaveToDisk(filename string) error {
 	// A FileMode represents a file's mode and permission bits.
 	// 0644 (a standard LINUX permission): Owner can read/write , Group and Others can only read
 	permissions := os.FileMode(0644)
+
+	// need to check whether the dump file exists or not in the directory
+	// if yes, then the content shall be updated
+	// if not, then file will be created anyways
 	return os.WriteFile(filename, data, permissions)
 }
 

@@ -1,7 +1,33 @@
 {
+ "fruits": {
+  "type": "list",
+  "value": [
+   "apple",
+   "banana",
+   "orange",
+   "mango"
+  ],
+  "expiryTime": "0001-01-01T00:00:00Z"
+ },
  "hello": {
   "type": "string",
   "value": "world",
+  "expiryTime": "0001-01-01T00:00:00Z"
+ },
+ "list": {
+  "type": "list",
+  "value": [
+   "apple",
+   "banana",
+   "carrot",
+   "lemon",
+   "mango"
+  ],
+  "expiryTime": "0001-01-01T00:00:00Z"
+ },
+ "name": {
+  "type": "string",
+  "value": "Alice",
   "expiryTime": "0001-01-01T00:00:00Z"
  },
  "numbers": {

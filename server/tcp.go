@@ -19,11 +19,13 @@ func StartServer(addr string, r *cache.RedisCache) error {
 
 	for {
 		conn, err := ln.Accept()
+		client := cache.NewClient(conn)
+
 		if err != nil {
 			fmt.Println("Error while accepting requests: ", err.Error());
 			continue;
 		}
 		fmt.Println("Client connected");
-		go r.HandleConnection(conn);
+		go r.HandleConnection(client);
 	}
 }
