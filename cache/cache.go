@@ -24,16 +24,30 @@ type Client struct {
 	Conn 	net.Conn
 	InTransaction 	bool
 	Transactions 	[][]interface{}
+	inSubscription	bool
+	Subscriptions	[]string
+}
+
+// example format:
+// ChannelA [ClientA, ClientB]
+// ChannelB [ClientC, ClientD, ClientE]
+type PubSub struct {
+	mu				sync.RWMutex
+	channels		map[string][]*Client
 }
 
 type RedisCache struct {
 	mu 		sync.Mutex
 	store 	map[string]*Entry // actual structure of a hash map
+	pubsubs	*PubSub
 }
 
 func NewRedisServer() *RedisCache {
 	return &RedisCache{
 		store: make(map[string]*Entry),
+		pubsubs: &PubSub{
+			channels: make(map[string][]*Client),
+		},
 	}
 }
 
@@ -176,6 +190,87 @@ func (r *RedisCache) HandleConnection (client *Client) {
 		fmt.Printf("the command is %v\r\n", commandStr)
 		fmt.Printf("the arguments are %v\r\n", args)
 
+		// commands when client is in subscription mode
+		if client.inSubscription {
+			switch command {
+			case "PUBLISH":
+				// command syntax: PUBLISH channel message
+				if len(args) < 2 {
+					client.Conn.Write([]byte("-ERR wrong number of arguments for 'PUBLISH' command\r\n"))
+					continue
+				}
+
+				channel, ok1 := args[0].(string)
+				message, ok2 := args[1].(string)
+				if !ok1 || !ok2 {
+					client.Conn.Write([]byte("-ERR args must be strings\r\n"))
+					continue
+				}
+
+				result, ok := r.Publish(channel, message)
+				if !ok {
+					client.Conn.Write([]byte("-ERR channel does not exist or no active subscribers left to send message\r\n"))
+					continue
+				}
+
+				fmt.Fprintf(client.Conn, ":%d\r\n", result)
+				continue
+
+			case "UNSUBSCRIBE":
+				// command syntax: UNSUBSCRIBE channel [channel...] or UNSUBSCRIBE
+				channels := []string{}
+				if len(args) > 0 {
+					for _, arg := range args {
+						chnl := arg.(string)
+						channels = append(channels, chnl)
+					}
+				}
+
+				result, ok := r.Unsubscribe(client, channels)
+				if !ok {
+					client.Conn.Write([]byte("-ERR something went wrong while unsubscribing\r\n"))
+					continue
+				}
+
+				fmt.Println(result)
+				client.Conn.Write([]byte(result))
+				if len(client.Subscriptions) == 0 {
+					client.inSubscription = false
+				}
+				continue
+
+			case "SUBSCRIBE":
+			// command syntax: SUBSCRIBE channel [channel...]
+			if len(args) < 1 {
+				client.Conn.Write([]byte("-ERR wrong number of arguments for 'SUBSCRIBE' command\r\n"))
+				continue
+			}
+
+			channels := []string{}
+			for _, arg := range args {
+				chnl := arg.(string)
+				channels = append(channels, chnl)
+			}
+
+			result, ok := r.Subscribe(client, channels)
+			if !ok {
+				continue
+			}
+
+			var response string
+			for _, channel := range channels {
+				response += fmt.Sprintf("*3\r\n$9\r\nsubscribe\r\n$%d\r\n%s\r\n:%d\r\n", len(channel), channel, result)
+			}
+
+			client.Conn.Write([]byte(response))
+			continue
+
+			default:
+				fmt.Fprintf(client.Conn, "-ERR unknown command\r\n")
+				continue
+			}
+		}
+
 		// commands for implementing transaction in redis --> MULTI & EXEC
 		switch command {
 		case "MULTI":
@@ -218,6 +313,32 @@ func (r *RedisCache) HandleConnection (client *Client) {
 			for _, res := range results {
 				client.Conn.Write([]byte(res))
 			}
+
+		case "SUBSCRIBE":
+			// command syntax: SUBSCRIBE channel [channel...]
+			if len(args) < 1 {
+				client.Conn.Write([]byte("-ERR wrong number of arguments for 'SUBSCRIBE' command\r\n"))
+				continue
+			}
+
+			channels := []string{}
+			for _, arg := range args {
+				chnl := arg.(string)
+				channels = append(channels, chnl)
+			}
+
+			result, ok := r.Subscribe(client, channels)
+			if !ok {
+				continue
+			}
+
+			var response string
+			for _, channel := range channels {
+				response += fmt.Sprintf("*3\r\n$9\r\nsubscribe\r\n$%d\r\n%s\r\n:%d\r\n", len(channel), channel, result)
+			}
+
+			client.Conn.Write([]byte(response))
+			continue
 
 		default:
 			// in case the client is in InTransaction mode, then all the commands instead of executing normally will go through this code block
